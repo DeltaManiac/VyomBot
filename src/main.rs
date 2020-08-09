@@ -1,32 +1,45 @@
+#[macro_use]
+extern crate dotenv_codegen;
+#[macro_use]
+extern crate log; // Used for logging
+use env_logger::Env;
 use roux::Reddit;
-
-static CLIENT_ID: &str = "";
-static CLIENT_SECRET: &str = "";
-static USER_AGENT: &str = "Vyom by /u/DeltaManiac";
-
 #[tokio::main]
 async fn main() {
-    let client = Reddit::new(USER_AGENT, CLIENT_ID, CLIENT_SECRET)
-        .username("")
-        .password("")
-        .login()
-        .await
-        .expect("Dcould login");
-
-    let me = client;
-    match me.unread().await {
-        Ok(listing) => {
-            for i in listing.data.children.iter() {
-                     dbg!(&i.data);
-                     me.mark_read(&i.data.name).await.expect("Couldnt mark as read");
-                // if i.data.r#type == "username_mention" && i.data.new {
-                //     dbg!(&i.data);
-                //     me.comment("Thats fun3", &i.data.name.as_str())
-                //         .await
-                //         .expect("Couldnt Comment");
-                // }
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
+    match Reddit::new(
+        dotenv!("VYOM_USERAGENT"),
+        dotenv!("VYOM_CLIENT_ID"),
+        dotenv!("VYOM_CLIENT_SECRET"),
+    )
+    .username(dotenv!("VYOM_USERNAME"))
+    .password(dotenv!("VYOM_PASSWORD"))
+    .login()
+    .await
+    {
+        // Try to make a new client with the credentials
+        Ok(client) => match client.inbox().await {
+            // Fetch the inbox of the logged in user
+            Ok(listing) => {
+                for message in listing.data.children.iter() {
+                    if message.data.new && message.data.r#type == "username_mention" {
+                        match client
+                            .comment(
+                                "You have been Noted by Vyom. Please Stand By!",
+                                &message.data.name.as_str(),
+                            )
+                            .await
+                        {
+                            Ok(_) => info!("Replied to {}", message.data.name),
+                            Err(_) => error!("Failed to reply to mention"),
+                        };
+                    }
+                }
             }
-        }
-        Err(e) => {}
+            Err(_) => {
+                error!("Failed to fetch messages");
+            }
+        },
+        Err(e) => panic!(e),
     }
 }

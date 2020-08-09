@@ -1,11 +1,15 @@
 [package]
 name = "vyom"
 version = "0.1.0"
-authors = ["DeltaManiac <maxpaynered@gmail.com>"]
+authors = ["Harikrishnan Menon <harikrishnan.menon@sap.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-roux = "1.0.0"
-tokio = { version = "0.2", features = ["macros"] }
+roux="1.0.0"
+dotenv_codegen="0.15.0"
+tokio = {version="0.2.22",features=["macros"]}
+env_logger ="0.7.1"
+log = "0.4.11"
+# https://www.youtube.com/playlist?list=PLf3u8NhoEikhTC5radGrmmqdkOK-xMDoZ

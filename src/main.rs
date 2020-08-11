@@ -1,11 +1,30 @@
 #[macro_use]
 extern crate dotenv_codegen;
 #[macro_use]
-extern crate log; // Used for logging
+extern crate log;
 use env_logger::Env;
 use reqwest;
 use roux::Reddit;
+use serde::Deserialize;
 use serde_json;
+
+const YT_KEY: &str = dotenv!("VYOM_YOUTUBE_KEY");
+const YT_MAX_RESULT: i32 = 50;
+
+#[derive(Debug, Deserialize)]
+struct Snippet {
+    title: String,
+    position: i32,
+}
+#[derive(Debug, Deserialize)]
+struct Item {
+    kind: String,
+    snippet: Snippet,
+}
+#[derive(Debug, Deserialize)]
+struct YoutubeResponse {
+    items: Vec<Item>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -201,26 +220,59 @@ async fn main() {
                                 None
                             }
                         };
+                        let mut reply: String =
+                            "Sorry couldn't find the YouTube Link! :(".to_string();
                         if playlist_id.is_some() {
-                            dbg!("Go fetch youtube");
+                            let url = format!("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId={}&key={}&maxResults={}",playlist_id.unwrap(),YT_KEY,YT_MAX_RESULT);
+                            let playlist_items = match reqwest::get(&url).await {
+                                Ok(response) => match response.json::<YoutubeResponse>().await {
+                                    Ok(yt_response) => Some(yt_response.items),
+                                    Err(e) => {
+                                        error!(
+                                            "Couldn't parse playlist response for comment {} reason : {}",
+                                             &message.data.name, e
+                                                 );
+                                        None
+                                    }
+                                },
+                                Err(e) => {
+                                    error!(
+                                        "Couldn't fetch youtube data for comment {} reason : {}",
+                                        &message.data.name, e
+                                    );
+                                    None
+                                }
+                            };
+                            if playlist_items.is_some() {
+                                let items = playlist_items.unwrap();
+                                if items.len() > 0 {
+                                    reply = "Playlist Items: \n".to_string();
+                                    for item in items {
+                                        reply.push_str(
+                                            format!("\n {} \n", item.snippet.title).as_str(),
+                                        )
+                                    }
+                                }
+                            }
                         }
                         match client
-                            .comment(
-                                "Thank you for standing by while we squished a bug. You shouldn't be seeing this message again!",
-                                &message.data.name.as_str(),
-                            )
+                            .comment(reply.as_str(), &message.data.name.as_str())
                             .await
                         {
                             Ok(_) => {
                                 info!("Replied to {}", message.data.name);
                                 match client.mark_read(message.data.name.as_str()).await {
                                     Ok(_) => info!("Marked {} as read", message.data.name),
-                                    Err(e) => {
-                                        error!("Failed to mark {} as read : reason : {:?}", message.data.name, e)
-                                    }
+                                    Err(e) => error!(
+                                        "Failed to mark {} as read : reason : {:?}",
+                                        message.data.name, e
+                                    ),
                                 }
                             }
-                            Err(e) => error!("Failed to reply to mention {} : reason : {:?}", message.data.name,e),
+                            Err(e) => error!(
+                                "Failed to reply to mention {} : reason : {:?}",
+                                message.data.name, e
+                            ),
                         };
                     }
                 }
